@@ -1,25 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowRight, BookOpen, Check, ChevronDown, Copy, Download, FolderOpen,
+  ArrowLeftRight, ArrowRight, BookOpen, Check, ChevronDown, Copy, Download, FolderOpen,
   History, Link2, LoaderCircle, Maximize2, Minus, MousePointer2, PanelLeft, Plus,
   Redo2, Search, Settings2, Trash2, Undo2, Upload, Workflow, X,
 } from 'lucide-react';
 import {
-  Background, BackgroundVariant, MarkerType, MiniMap, Position, ReactFlow, ReactFlowProvider,
+  Background, BackgroundVariant, ConnectionMode, MarkerType, MiniMap, ReactFlow, ReactFlowProvider,
   useReactFlow,
 } from '@xyflow/react';
-import type { Connection, Edge, EdgeChange, NodeChange } from '@xyflow/react';
+import type { Connection, EdgeChange, NodeChange } from '@xyflow/react';
 import { api } from './api';
 import {
-  COMPONENT_TYPES, contentOf, duplicateElements, emptyContext, emptyProperties,
+  COMPONENT_TYPES, CONNECTION_PORTS, contentOf, duplicateElements, emptyContext, emptyProperties,
   parseImport, removeElements, sampleGraph,
 } from './domain';
-import type { ComponentType, DiagramContent, DiagramEdge, DiagramNode, DiagramSummary, Version } from './domain';
+import type { ComponentType, ConnectionPort, DiagramContent, DiagramEdge, DiagramNode, DiagramSummary, Version } from './domain';
 import { Brand, CATALOG, ComponentNode, IconButton, InteractionContext, metadata, Modal } from './components';
 import type { StudioNode } from './components';
 import { useEditor } from './useEditor';
+import { ConnectionEdge } from './ConnectionEdge';
+import type { ConnectionFlowEdge } from './ConnectionEdge';
+import { connectionLanes, nodeHandles } from './connections';
 
 const nodeTypes = { component: ComponentNode };
+const edgeTypes = { connection: ConnectionEdge };
 const dateLabel = (date: string) => new Date(date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const messageOf = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.';
 
@@ -207,7 +211,8 @@ function Studio() {
   function connect(connection: Connection) {
     if (!connection.source || !connection.target) return;
     if ((doc?.graph.edges.length ?? 0) >= 1500) { setNotice('The diagram has reached the connection limit.'); return; }
-    const edge: DiagramEdge = { id: crypto.randomUUID(), source: connection.source, target: connection.target, label: '', protocol: '', interaction: 'synchronous' };
+    const edge: DiagramEdge = { id: crypto.randomUUID(), source: connection.source, target: connection.target, label: '', protocol: '', interaction: 'synchronous',
+      direction: 'one_way', source_port: (connection.sourceHandle ?? 'right') as ConnectionPort, target_port: (connection.targetHandle ?? 'left') as ConnectionPort };
     change(content => ({ ...content, graph: { ...content.graph, edges: [...content.graph.edges, edge] } })); select([edge.id]);
   }
 
@@ -215,15 +220,14 @@ function Studio() {
     id: component.id, type: 'component', position: component.position, data: { component },
     selected: selection.has(component.id), width: component.width, height: component.height,
     measured: { width: component.width, height: component.height },
-    handles: [
-      { id: 'in', type: 'target', position: Position.Left, x: -4, y: component.height / 2 - 4, width: 8, height: 8 },
-      { id: 'out', type: 'source', position: Position.Right, x: component.width - 4, y: component.height / 2 - 4, width: 8, height: 8 },
-    ],
+    handles: nodeHandles(component),
     style: { width: component.width, height: component.height },
   })) ?? [];
-  const edges: Edge[] = doc?.graph.edges.map(edge => ({
-    id: edge.id, source: edge.source, target: edge.target, sourceHandle: 'out', targetHandle: 'in',
-    label: edge.label || edge.protocol, selected: selection.has(edge.id), type: 'smoothstep',
+  const lanes = connectionLanes(doc?.graph.edges ?? []);
+  const edges: ConnectionFlowEdge[] = doc?.graph.edges.map(edge => ({
+    id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.source_port ?? 'right', targetHandle: edge.target_port ?? 'left',
+    label: edge.label || edge.protocol, selected: selection.has(edge.id), type: 'connection', data: lanes.get(edge.id),
+    markerStart: edge.direction === 'two_way' ? { type: MarkerType.ArrowClosed, width: 16, height: 16, orient: 'auto-start-reverse', color: selection.has(edge.id) ? '#247657' : '#85958d' } : undefined,
     markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: selection.has(edge.id) ? '#247657' : '#85958d' },
     style: { stroke: selection.has(edge.id) ? '#247657' : '#85958d', strokeWidth: selection.has(edge.id) ? 2 : 1.5, strokeDasharray: edge.interaction === 'asynchronous' ? '6 4' : undefined },
     labelStyle: { fill: '#5d6a62', fontSize: 11, fontWeight: 500 }, labelBgStyle: { fill: '#f7f8f5' }, labelBgPadding: [6, 4], labelBgBorderRadius: 4,
@@ -377,7 +381,7 @@ function Studio() {
               : editor.status === 'error' ? <button onClick={() => void editor.save()}>Retry save</button> : <IconButton label="Dismiss message" onClick={() => setAppError('')}><X size={16} /></IconButton>}
           </div>}
 
-          <ReactFlow<StudioNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={nodesChanged} onEdgesChange={edgesChanged} onConnect={connect}
+          <ReactFlow<StudioNode, ConnectionFlowEdge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} connectionMode={ConnectionMode.Loose} onNodesChange={nodesChanged} onEdgesChange={edgesChanged} onConnect={connect}
             onNodeDragStart={() => { editor.checkpoint(); editor.setInteracting(true); }} onNodeDragStop={() => editor.setInteracting(false)}
             onNodeClick={() => setTab('properties')}
             onEdgeClick={() => setTab('properties')} onPaneClick={() => setSelection(new Set())}
@@ -394,9 +398,9 @@ function Studio() {
 
           {loading ? <div className="canvas-empty"><LoaderCircle className="spin" size={25} /><p>Opening your workspace…</p></div>
             : !doc ? <div className="canvas-empty"><div className="empty-illustration"><Workflow size={38} strokeWidth={1.3} /><span className="illustration-dot" /></div><div className="eyebrow">A PLACE TO THINK IN SYSTEMS</div><h1>Make your architecture visible.</h1><p>Connect the pieces. Capture the decisions.<br />Build a clearer picture of your system.</p><button className="button button-primary" disabled={busy} onClick={() => void create()}><Plus size={16} />Create your first diagram</button><button className="text-button" disabled={busy} onClick={() => void create({ title: 'Web application architecture', graph: sampleGraph(), context: { ...emptyContext(), brief: 'A web application with an API, read cache, and primary database.' } })}>Or explore a simple example <ArrowRight size={14} /></button></div>
-            : !doc.graph.nodes.length && <div className="canvas-empty diagram-empty"><div className="empty-illustration"><Workflow size={32} strokeWidth={1.3} /></div><h2>A blank canvas. A new possibility.</h2><p>Add a component from the library to get started.<br />Drag between the dots to connect your system.</p><button className="button button-outline" onClick={() => { change(content => ({ ...content, graph: sampleGraph() })); window.setTimeout(() => void flow.fitView({ padding: 0.3 }), 100); }}>Start with an example <ArrowRight size={14} /></button></div>}
+            : !doc.graph.nodes.length && <div className="canvas-empty diagram-empty"><div className="empty-illustration"><Workflow size={32} strokeWidth={1.3} /></div><h2>A blank canvas. A new possibility.</h2><p>Add a component from the library to get started.<br />Drag between any dots to connect your system.</p><button className="button button-outline" onClick={() => { change(content => ({ ...content, graph: sampleGraph() })); window.setTimeout(() => void flow.fitView({ padding: 0.3 }), 100); }}>Start with an example <ArrowRight size={14} /></button></div>}
 
-          <div className="canvas-bottom"><span className="canvas-tip"><Link2 size={13} />Drag from a right dot to a left dot to connect</span><div className="zoom-controls"><IconButton label="Zoom out" onClick={() => void flow.zoomOut({ duration: 200 })}><Minus size={15} /></IconButton><span>{Math.round(zoom * 100)}%</span><IconButton label="Zoom in" onClick={() => void flow.zoomIn({ duration: 200 })}><Plus size={15} /></IconButton><span className="toolbar-divider" /><IconButton label="Fit diagram (F)" onClick={() => void flow.fitView({ padding: 0.3, duration: 300 })}><Maximize2 size={15} /></IconButton></div></div>
+          <div className="canvas-bottom"><span className="canvas-tip"><Link2 size={13} />Drag between any dots · reuse dots for more connections</span><div className="zoom-controls"><IconButton label="Zoom out" onClick={() => void flow.zoomOut({ duration: 200 })}><Minus size={15} /></IconButton><span>{Math.round(zoom * 100)}%</span><IconButton label="Zoom in" onClick={() => void flow.zoomIn({ duration: 200 })}><Plus size={15} /></IconButton><span className="toolbar-divider" /><IconButton label="Fit diagram (F)" onClick={() => void flow.fitView({ padding: 0.3, duration: 300 })}><Maximize2 size={15} /></IconButton></div></div>
           {notice && <div className="toast" role="status"><Check size={15} />{notice}</div>}
         </main>
 
@@ -416,9 +420,17 @@ function Studio() {
                   <label>Technology<input {...fieldEditing} maxLength={200} value={selectedNode.properties.technology} placeholder="e.g. PostgreSQL, Redis, Python" onChange={event => editProperty('technology', event.target.value)} /></label>
                   <label>Description<textarea {...fieldEditing} maxLength={5000} rows={4} value={selectedNode.properties.description} placeholder="What is this component responsible for?" onChange={event => editProperty('description', event.target.value)} /></label>
                   <div className="field-row"><label>Replicas<input {...fieldEditing} type="number" min={1} max={1000000} step={1} value={selectedNode.properties.replicas ?? ''} placeholder="Unknown" onChange={event => { const value = event.target.value; if (!value) editProperty('replicas', null); else if (Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 1000000) editProperty('replicas', Number(value)); }} /></label><label>Region<input {...fieldEditing} maxLength={200} value={selectedNode.properties.region} placeholder="Optional" onChange={event => editProperty('region', event.target.value)} /></label></div>
-                </fieldset><div className="inspector-actions"><button className="button button-outline" disabled={disabled} onClick={duplicateSelection}><Copy size={14} />Duplicate</button><IconButton label="Delete component" className="danger" disabled={disabled} onClick={deleteSelection}><Trash2 size={16} /></IconButton></div><p className="field-hint">Drag the component to move it. Use the corner handles to resize it.</p></>
-                : selectedEdge ? <><div className="inspector-component-icon tint-green"><Link2 size={24} strokeWidth={1.5} /></div><div className="eyebrow">CONNECTION</div><h2>Data flow</h2><p className="connection-path">{doc?.graph.nodes.find(node => node.id === selectedEdge.source)?.label}<ArrowRight size={14} />{doc?.graph.nodes.find(node => node.id === selectedEdge.target)?.label}</p>
-                  <fieldset disabled={disabled} className="property-fields"><label>Label<input {...fieldEditing} maxLength={200} value={selectedEdge.label} placeholder="e.g. Read / write" onChange={event => editEdge({ label: event.target.value })} /></label><label>Protocol<input {...fieldEditing} maxLength={100} value={selectedEdge.protocol} placeholder="e.g. HTTPS, gRPC, SQL" onChange={event => editEdge({ protocol: event.target.value })} /></label><label>Interaction<select value={selectedEdge.interaction} onChange={event => editEdge({ interaction: event.target.value as DiagramEdge['interaction'] })}><option value="synchronous">Synchronous</option><option value="asynchronous">Asynchronous</option></select></label></fieldset><button className="button button-outline danger" disabled={disabled} onClick={deleteSelection}><Trash2 size={14} />Delete connection</button></>
+                </fieldset><div className="inspector-actions"><button className="button button-outline" disabled={disabled} onClick={duplicateSelection}><Copy size={14} />Duplicate</button><IconButton label="Delete component" className="danger" disabled={disabled} onClick={deleteSelection}><Trash2 size={16} /></IconButton></div><p className="field-hint">{doc?.graph.edges.filter(edge => edge.source === selectedNode.id || edge.target === selectedNode.id).length} connections. Each dot can be reused for incoming and outgoing connections. Drag the component to move it; use corner handles to resize.</p></>
+                : selectedEdge ? <><div className="inspector-component-icon tint-green"><Link2 size={24} strokeWidth={1.5} /></div><div className="eyebrow">CONNECTION</div><h2>Data flow</h2><p className="connection-path">{doc?.graph.nodes.find(node => node.id === selectedEdge.source)?.label}{selectedEdge.direction === 'two_way' ? <ArrowLeftRight size={14} /> : <ArrowRight size={14} />}{doc?.graph.nodes.find(node => node.id === selectedEdge.target)?.label}</p>
+                  <fieldset disabled={disabled} className="property-fields">
+                    <label>Label<input {...fieldEditing} maxLength={200} value={selectedEdge.label} placeholder="e.g. Read / write" onChange={event => editEdge({ label: event.target.value })} /></label>
+                    <label>Direction<select value={selectedEdge.direction ?? 'one_way'} onChange={event => editEdge({ direction: event.target.value as DiagramEdge['direction'] })}><option value="one_way">One way</option><option value="two_way">Two way</option></select></label>
+                    <label>Protocol<input {...fieldEditing} maxLength={100} value={selectedEdge.protocol} placeholder="e.g. HTTPS, gRPC, SQL" onChange={event => editEdge({ protocol: event.target.value })} /></label>
+                    <label>Interaction<select value={selectedEdge.interaction} onChange={event => editEdge({ interaction: event.target.value as DiagramEdge['interaction'] })}><option value="synchronous">Synchronous</option><option value="asynchronous">Asynchronous</option></select></label>
+                    <div className="field-row"><label>Source side<select value={selectedEdge.source_port ?? 'right'} onChange={event => editEdge({ source_port: event.target.value as ConnectionPort })}>{CONNECTION_PORTS.map(port => <option key={port} value={port}>{port[0].toUpperCase() + port.slice(1)}</option>)}</select></label><label>Target side<select value={selectedEdge.target_port ?? 'left'} onChange={event => editEdge({ target_port: event.target.value as ConnectionPort })}>{CONNECTION_PORTS.map(port => <option key={port} value={port}>{port[0].toUpperCase() + port.slice(1)}</option>)}</select></label></div>
+                  </fieldset>
+                  <div className="inspector-actions"><button className="button button-outline" disabled={disabled} onClick={() => editEdge({ source: selectedEdge.target, target: selectedEdge.source, source_port: selectedEdge.target_port ?? 'left', target_port: selectedEdge.source_port ?? 'right' })}><ArrowLeftRight size={14} />Reverse endpoints</button><IconButton label="Delete connection" className="danger" disabled={disabled} onClick={deleteSelection}><Trash2 size={16} /></IconButton></div>
+                  <p className="field-hint">Two way adds an arrow at both ends. Multiple connections can share the same dots.</p></>
                   : selection.size > 1 ? <div className="inspector-empty"><MousePointer2 size={27} /><h3>{selection.size} elements selected</h3><p>Move selected components together, duplicate them, or remove the selection.</p><button className="button button-outline" disabled={disabled} onClick={duplicateSelection}><Copy size={14} />Duplicate components</button><button className="text-button danger" disabled={disabled} onClick={deleteSelection}>Delete selection</button></div>
                     : <div className="inspector-empty"><MousePointer2 size={27} strokeWidth={1.5} /><h3>A closer look</h3><p>Select a component or connection to edit its properties.</p><span className="keyboard-tip"><kbd>Shift</kbd> + click to select multiple</span></div>}
           </div>
@@ -444,7 +456,7 @@ function Studio() {
 
       {editor.draft && <Modal title="Recover your local draft?" subtitle="We found changes that were not saved to the server." onClose={() => { /* The user must explicitly choose to recover or discard. */ }}><p className="draft-summary">{editor.draft.content.title} · {editor.draft.content.graph.nodes.length} components</p>{editor.draft.baseVersion !== doc?.version && <p className="field-hint">The server has a newer version. Recover this draft and save it as a copy to keep both designs.</p>}<div className="modal-footer"><button className="button button-outline" onClick={() => editor.resolveDraft(false)}>Discard local draft</button><button className="button button-primary" onClick={() => editor.resolveDraft(true)}>Recover draft</button></div></Modal>}
 
-      {showHelp && <Modal title="Make yourself at home" subtitle="A few ways to move around your design canvas." onClose={() => setShowHelp(false)}><div className="help-list"><div><strong>Add a component</strong><span>Click a library item, or drag it onto the canvas.</span></div><div><strong>Connect two components</strong><span>Drag from a right dot to another component's left dot.</span></div><div><strong>Move around</strong><span>Drag the background to pan. Scroll to zoom.</span></div><div><strong>Select multiple</strong><span>Shift + drag a box, or Shift + click components.</span></div><div><strong>Undo / redo</strong><span>⌘/Ctrl Z · ⌘/Ctrl Shift Z</span></div><div><strong>Duplicate / delete</strong><span>⌘/Ctrl D · Delete or Backspace</span></div><div><strong>Fit everything on screen</strong><span>Press F, or use the fit button.</span></div><div><strong>Save</strong><span>Changes autosave. ⌘/Ctrl S saves immediately.</span></div></div><div className="modal-footer"><button className="button button-primary" onClick={() => setShowHelp(false)}>Got it <Check size={14} /></button></div></Modal>}
+      {showHelp && <Modal title="Make yourself at home" subtitle="A few ways to move around your design canvas." onClose={() => setShowHelp(false)}><div className="help-list"><div><strong>Add a component</strong><span>Click a library item, or drag it onto the canvas.</span></div><div><strong>Connect components</strong><span>Drag between dots on any side, or click a dot and then another. Each dot can be reused for multiple connections.</span></div><div><strong>Draw two-way arrows</strong><span>Select a connection, then choose Direction → Two way in Properties.</span></div><div><strong>Move around</strong><span>Drag the background to pan. Scroll to zoom.</span></div><div><strong>Select multiple</strong><span>Shift + drag a box, or Shift + click components.</span></div><div><strong>Undo / redo</strong><span>⌘/Ctrl Z · ⌘/Ctrl Shift Z</span></div><div><strong>Duplicate / delete</strong><span>⌘/Ctrl D · Delete or Backspace</span></div><div><strong>Fit everything on screen</strong><span>Press F, or use the fit button.</span></div><div><strong>Save</strong><span>Changes autosave. ⌘/Ctrl S saves immediately.</span></div></div><div className="modal-footer"><button className="button button-primary" onClick={() => setShowHelp(false)}>Got it <Check size={14} /></button></div></Modal>}
       {busy && !isModalOpen && <div className="busy-indicator" role="status"><LoaderCircle className="spin" size={16} />Working…</div>}
     </div>
   </InteractionContext.Provider>;

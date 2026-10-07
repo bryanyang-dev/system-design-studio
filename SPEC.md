@@ -85,7 +85,7 @@ Initial components: client/browser/mobile app, CDN, load balancer, API gateway, 
 
 Component properties: label, type, description, technology (optional), replicas, region, and typed capacity/configuration fields where applicable. Unknown values remain unknown rather than defaulting to invented numbers.
 
-Connection properties: source/target ports, direction, label, protocol, synchronous/asynchronous interaction, payload description, and optional estimated throughput. Connections describe interactions; they do not implicitly prove reliability or delivery guarantees.
+Connection properties: source/target ports on any side of a component, one-way or two-way direction, label, protocol, synchronous/asynchronous interaction, payload description, and optional estimated throughput. Each node and port supports multiple connections; parallel connections should remain visually distinguishable. Connections describe interactions; they do not implicitly prove reliability or delivery guarantees.
 
 Deleting a component removes its attached connections in the same transaction. Group membership must be acyclic. JSON imports have size limits, schema validation, and a preview before replacing or creating a diagram.
 

@@ -16,11 +16,25 @@ def test_postgres_roundtrip():
         path = f"/api/diagrams/{created['id']}"
         version = created["version"]
         try:
-            payload = {"title": created["title"], "expected_version": version, "graph": {"nodes": [{"id": "service", "type": "service", "label": "API", "position": {"x": 100, "y": 200}}]}, "context": {"brief": "Persistent diagram"}}
+            graph = {
+                "nodes": [
+                    {"id": "service", "type": "service", "label": "API", "position": {"x": 100, "y": 200}},
+                    {"id": "cache", "type": "cache", "label": "Cache", "position": {"x": 400, "y": 200}},
+                ],
+                "edges": [
+                    {"id": "read", "source": "service", "target": "cache", "direction": "two_way", "source_port": "bottom", "target_port": "top"},
+                    {"id": "refresh", "source": "service", "target": "cache", "source_port": "bottom", "target_port": "top"},
+                ],
+            }
+            payload = {"title": created["title"], "expected_version": version, "graph": graph, "context": {"brief": "Persistent diagram"}}
             response = client.patch(path, json=payload)
             assert response.status_code == 200
             version = response.json()["version"]
-            assert client.get(path).json()["graph"]["nodes"][0]["label"] == "API"
+            saved_graph = response.json()["graph"]
+            assert client.get(path).json()["graph"] == saved_graph
+            assert saved_graph["edges"][0]["direction"] == "two_way"
+            assert saved_graph["edges"][1]["direction"] == "one_way"
+            assert all(edge["source_port"] == "bottom" and edge["target_port"] == "top" for edge in saved_graph["edges"])
             unchanged = client.patch(path, json={**payload, "expected_version": version})
             assert unchanged.status_code == 200
             assert unchanged.json()["version"] == version

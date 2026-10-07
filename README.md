@@ -7,7 +7,8 @@ A local web app for creating and editing software system diagrams. This first im
 - Create, rename, open, duplicate, and delete diagrams.
 - Add 14 kinds of components by clicking or dragging from the palette.
 - Move, resize, multi-select, duplicate, and delete components.
-- Draw directed connections; edit labels, protocols, and synchronous/asynchronous interaction.
+- Draw one-way or two-way connections from reusable dots on all four sides of each component. Nodes and individual dots accept multiple connections; parallel connections use separate paths.
+- Edit connection labels, protocols, source/target sides, direction, and synchronous/asynchronous interaction.
 - Edit component descriptions, technology, replica counts, and regions.
 - Keep a separate brief, requirements, and constraints for each diagram.
 - Pan, zoom, snap to grid, fit the diagram, and use a minimap.
@@ -80,7 +81,7 @@ Two tabs cannot silently overwrite each other: every save includes `expected_ver
 
 ## Checks after dependencies are approved
 
-Setup has been completed in this workspace. Verified: five backend tests (including the PostgreSQL integration check), four frontend tests, and the production build. Browser checks covered creation, renaming, properties/context edits, connections, movement, resize/undo, duplication/delete/undo, switching diagrams, and persistence after reload. The editor also adapts to narrow windows with collapsible side panels.
+Setup has been completed in this workspace. Verified: seven backend tests (including the PostgreSQL integration check), seven frontend tests, and the production build. Browser checks covered creation, renaming, properties/context edits, two-way arrows, multiple connections sharing a dot, top/bottom connections, movement, resize/undo, duplication/delete/undo, switching diagrams, and persistence after reload. The editor also adapts to narrow windows with collapsible side panels.
 
 The dependency audit reports three advisories in development test tooling (`vitest`, `@vitest/mocker`, and `tinypool`). No upgrade or automatic audit fix was run; dependency upgrades need separate approval under the workspace policy. The Vitest UI/server is not started by the development app.
 
@@ -114,3 +115,5 @@ Manual editor check: create a diagram, add two nodes, connect them, label the co
 | `POST /api/diagrams/{id}/restore` | Restore with expected version |
 
 Documents support up to 500 components and 1,500 connections, and requests/imports are limited to 2 MB. Validation rejects duplicate IDs, missing connection endpoints, unsupported component types, invalid dimensions, and non-finite coordinates. A save and its new revision commit in one database transaction.
+
+Connections store `direction` (`one_way` / `two_way`), `source_port`, and `target_port` (`top` / `right` / `bottom` / `left`). Older diagrams and exports remain compatible: missing values default to a one-way connection from the right to the left. No SQL table migration is required because these fields live inside the graph JSON document. Select a connection and choose **Direction → Two way** in Properties to put arrowheads at both ends; endpoint sides can also be changed there.

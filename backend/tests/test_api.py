@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import create_app
+from backend.database import DiagramRecord, RevisionRecord, make_engine, session_factory
 
 
 @pytest.fixture
@@ -59,3 +60,59 @@ def test_deletion_and_origin_guard(client):
     assert client.delete(path, params={"expected_version": 1}).status_code == 204
     assert client.get(path).status_code == 404
     assert client.get("/api/diagrams").json() == []
+
+
+def test_multiple_connections_and_two_way_metadata(client):
+    edges = [
+        {"id": "e1", "source": "api", "target": "cache", "direction": "two_way", "source_port": "bottom", "target_port": "top"},
+        {"id": "e2", "source": "api", "target": "db"},
+        {"id": "e3", "source": "api", "target": "cache", "source_port": "bottom", "target_port": "top"},
+        {"id": "e4", "source": "cache", "target": "api", "source_port": "top", "target_port": "bottom"},
+    ]
+    response = client.post("/api/diagrams", json={"graph": {"nodes": [node("api"), node("cache"), node("db")], "edges": edges}})
+    assert response.status_code == 201
+    created = response.json()
+    path = f"/api/diagrams/{created['id']}"
+    graph = client.get(path).json()["graph"]
+    assert len(graph["edges"]) == 4
+    assert graph["edges"][0]["direction"] == "two_way"
+    assert graph["edges"][0]["source_port"] == "bottom"
+    graph["edges"][0]["direction"] = "one_way"
+    payload = {"title": created["title"], "graph": graph, "expected_version": 1}
+    assert client.patch(path, json=payload).status_code == 200
+    restored = client.post(f"{path}/restore", json={"version": 1, "expected_version": 2}).json()
+    assert restored["graph"]["edges"][0]["direction"] == "two_way"
+    assert len(restored["graph"]["edges"]) == 4
+    for field, value in [("direction", "unknown"), ("source_port", "unknown")]:
+        graph["edges"][0][field] = value
+        assert client.patch(path, json={**payload, "graph": graph, "expected_version": 3}).status_code == 422
+        graph["edges"][0][field] = restored["graph"]["edges"][0][field]
+    assert client.get(path).json()["version"] == 3
+
+
+def test_legacy_connections_are_read_and_restored_without_a_data_migration(tmp_path):
+    url = f"sqlite:///{tmp_path / 'legacy.db'}"
+    with TestClient(create_app(url)) as client:
+        created = client.post("/api/diagrams", json={"graph": {"nodes": [node("api"), node("db")], "edges": [{"id": "e1", "source": "api", "target": "db"}]}}).json()
+    # Reproduce the JSON shape already present in databases created before this feature.
+    legacy_graph = created["graph"]
+    for field in ["direction", "source_port", "target_port"]:
+        del legacy_graph["edges"][0][field]
+    engine = make_engine(url)
+    with session_factory(engine)() as session:
+        session.get(DiagramRecord, created["id"]).graph = legacy_graph
+        session.get(RevisionRecord, (created["id"], 1)).graph = legacy_graph
+        session.commit()
+    engine.dispose()
+    with TestClient(create_app(url)) as client:
+        path = f"/api/diagrams/{created['id']}"
+        loaded = client.get(path).json()
+        assert loaded["graph"]["edges"][0]["source_port"] == "right"
+        assert loaded["graph"]["edges"][0]["target_port"] == "left"
+        assert loaded["graph"]["edges"][0]["direction"] == "one_way"
+        payload = {"title": loaded["title"], "graph": loaded["graph"], "context": loaded["context"], "expected_version": 1}
+        assert client.patch(path, json=payload).json()["version"] == 1
+        payload["graph"]["edges"][0]["direction"] = "two_way"
+        assert client.patch(path, json=payload).status_code == 200
+        restored = client.post(f"{path}/restore", json={"version": 1, "expected_version": 2}).json()
+        assert restored["graph"]["edges"][0]["direction"] == "one_way"

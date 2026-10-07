@@ -53,6 +53,9 @@ class DiagramEdge(StrictModel):
     label: str = Field(default="", max_length=200)
     protocol: str = Field(default="", max_length=100)
     interaction: Literal["synchronous", "asynchronous"] = "synchronous"
+    direction: Literal["one_way", "two_way"] = "one_way"
+    source_port: Literal["top", "right", "bottom", "left"] = "right"
+    target_port: Literal["top", "right", "bottom", "left"] = "left"
 
 
 class Graph(StrictModel):
@@ -102,4 +105,3 @@ class DiagramSave(DiagramInput):
 class RestoreInput(StrictModel):
     expected_version: int = Field(ge=1)
     version: int = Field(ge=1)
-

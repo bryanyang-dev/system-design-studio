@@ -8,7 +8,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from backend.database import Base, DiagramRecord, RevisionRecord, make_engine, now, session_factory
-from backend.schemas import DiagramInput, DiagramSave, RestoreInput
+from backend.schemas import DiagramInput, DiagramSave, Graph, RestoreInput
 
 
 def summary(record):
@@ -23,7 +23,8 @@ def summary(record):
 
 
 def document(record):
-    return {**summary(record), "graph": record.graph, "context": record.context}
+    # Supply additive connection defaults for diagrams/revisions saved by older clients.
+    return {**summary(record), "graph": Graph.model_validate(record.graph).model_dump(), "context": record.context}
 
 
 def revision(record):
@@ -118,7 +119,8 @@ def create_app(database_url=None):
     def save_diagram(diagram_id: str, payload: DiagramSave, session: Session = Depends(db)):
         record = get_record(session, diagram_id)
         values = payload.model_dump(exclude={"expected_version"})
-        if record.version == payload.expected_version and all(getattr(record, key) == value for key, value in values.items()):
+        current = document(record)
+        if record.version == payload.expected_version and all(current[key] == value for key, value in values.items()):
             return document(record)
         return save_record(session, record, values, payload.expected_version)
 

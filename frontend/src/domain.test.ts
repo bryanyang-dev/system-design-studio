@@ -8,6 +8,8 @@ describe('diagram operations', () => {
     const reordered = { title: 'Feed', graph: { edges: graph.edges, nodes: graph.nodes, schema_version: graph.schema_version }, context: { constraints: '', requirements: '', brief: '' } };
     expect(fingerprint(first)).toBe(fingerprint(reordered));
     expect(fingerprint({ ...first, title: 'Changed' })).not.toBe(fingerprint(first));
+    const legacy = { ...first, graph: { ...graph, edges: graph.edges.map(({ direction: _direction, source_port: _source, target_port: _target, ...edge }) => edge) } };
+    expect(fingerprint(legacy as typeof first)).toBe(fingerprint(first));
   });
   it('deletes attached connections and preserves unrelated nodes', () => {
     const original = sampleGraph();

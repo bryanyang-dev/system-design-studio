@@ -5,9 +5,11 @@ import {
   Layers3, Network, Radio, Server, Shield, Workflow, X, Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Handle, NodeResizer, Position } from '@xyflow/react';
+import { Handle, NodeResizer } from '@xyflow/react';
 import type { Node, NodeProps } from '@xyflow/react';
+import { CONNECTION_PORTS } from './domain';
 import type { ComponentType, DiagramNode } from './domain';
+import { PORT_POSITIONS } from './connections';
 
 export const CATALOG: { type: ComponentType; label: string; detail: string; icon: LucideIcon; color: string; category: string }[] = [
   { type: 'client', label: 'Client', detail: 'Browser or mobile app', icon: Laptop, color: 'blue', category: 'Traffic & compute' },
@@ -36,12 +38,12 @@ export function ComponentNode({ data, selected }: NodeProps<StudioNode>) {
   return <div className={`component-node ${selected ? 'is-selected' : ''}`}>
     <NodeResizer isVisible={selected} minWidth={160} minHeight={88} maxWidth={1000} maxHeight={1000}
       color="#247657" onResizeStart={interaction.begin} onResizeEnd={interaction.end} />
-    <Handle type="target" position={Position.Left} id="in" aria-label={`Connect to ${component.label}`} />
+    {CONNECTION_PORTS.map(port => <Handle key={port} type="source" position={PORT_POSITIONS[port]} id={port}
+      aria-label={`Connect ${component.label} ${port}`} title={`${port} connection — reusable for incoming and outgoing connections`} />)}
     <div className="node-top"><span className={`node-icon tint-${info.color}`}><Icon size={18} strokeWidth={1.8} /></span>
       <span className="node-kind">{info.label}</span>{component.properties.replicas && <span className="node-replicas">×{component.properties.replicas}</span>}</div>
     <div className="node-label">{component.label}</div>
     {component.properties.technology && <div className="node-technology">{component.properties.technology}</div>}
-    <Handle type="source" position={Position.Right} id="out" aria-label={`Connect from ${component.label}`} />
   </div>;
 }
 
@@ -82,4 +84,3 @@ export function Modal({ title, subtitle, children, onClose, wide = false }: {
     </div>
   </div>;
 }
-

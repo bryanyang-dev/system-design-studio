@@ -3,6 +3,8 @@ export const COMPONENT_TYPES = [
   'database', 'document_database', 'cache', 'queue', 'stream', 'storage', 'external', 'generic',
 ] as const;
 export type ComponentType = typeof COMPONENT_TYPES[number];
+export const CONNECTION_PORTS = ['top', 'right', 'bottom', 'left'] as const;
+export type ConnectionPort = typeof CONNECTION_PORTS[number];
 export type Properties = { description: string; technology: string; region: string; replicas: number | null };
 export type DiagramNode = {
   id: string; type: ComponentType; label: string; position: { x: number; y: number };
@@ -11,6 +13,8 @@ export type DiagramNode = {
 export type DiagramEdge = {
   id: string; source: string; target: string; label: string; protocol: string;
   interaction: 'synchronous' | 'asynchronous';
+  direction: 'one_way' | 'two_way';
+  source_port: ConnectionPort; target_port: ConnectionPort;
 };
 export type Graph = { schema_version: 1; nodes: DiagramNode[]; edges: DiagramEdge[] };
 export type DesignContext = { brief: string; requirements: string; constraints: string };
@@ -23,7 +27,11 @@ export const emptyGraph = (): Graph => ({ schema_version: 1, nodes: [], edges: [
 export const emptyContext = (): DesignContext => ({ brief: '', requirements: '', constraints: '' });
 export const contentOf = (doc: DiagramContent): DiagramContent => ({ title: doc.title, graph: doc.graph, context: doc.context });
 // PostgreSQL JSONB reorders object keys; compare meaning rather than insertion order.
-export const fingerprint = (doc: DiagramContent) => JSON.stringify(contentOf(doc), (_key, value) => {
+export const fingerprint = (doc: DiagramContent) => JSON.stringify({
+  ...contentOf(doc), graph: { ...doc.graph, edges: doc.graph.edges.map(edge => ({
+    ...edge, direction: edge.direction ?? 'one_way', source_port: edge.source_port ?? 'right', target_port: edge.target_port ?? 'left',
+  })) },
+}, (_key, value) => {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]));
   }
@@ -57,6 +65,7 @@ export function sampleGraph(): Graph {
   });
   const edge = (id: string, source: string, target: string, label: string): DiagramEdge => ({
     id, source, target, label, protocol: '', interaction: 'synchronous',
+    direction: 'one_way', source_port: 'right', target_port: 'left',
   });
   return {
     schema_version: 1,
@@ -115,7 +124,12 @@ export function parseImport(value: unknown): DiagramContent {
     if (!nodeIds.has(source) || !nodeIds.has(target)) throw new Error('A connection references a missing component.');
     const interaction = edge.interaction ?? 'synchronous';
     if (interaction !== 'synchronous' && interaction !== 'asynchronous') throw new Error('Unknown interaction type.');
-    return { id: uniqueId(edge.id), source, target, label: text(edge.label, 200), protocol: text(edge.protocol, 100), interaction };
+    const direction = edge.direction ?? 'one_way';
+    if (direction !== 'one_way' && direction !== 'two_way') throw new Error('Unknown connection direction.');
+    const sourcePort = edge.source_port ?? 'right'; const targetPort = edge.target_port ?? 'left';
+    if (!CONNECTION_PORTS.includes(sourcePort as ConnectionPort) || !CONNECTION_PORTS.includes(targetPort as ConnectionPort)) throw new Error('Unknown connection side.');
+    return { id: uniqueId(edge.id), source, target, label: text(edge.label, 200), protocol: text(edge.protocol, 100), interaction,
+      direction, source_port: sourcePort as ConnectionPort, target_port: targetPort as ConnectionPort };
   });
   const context = record(doc.context ?? {});
   return {
