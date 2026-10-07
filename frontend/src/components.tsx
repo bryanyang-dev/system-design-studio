@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ArrowRightLeft, Box, Braces, Database, Globe, HardDrive, Laptop,
-  Layers3, Network, Radio, Server, Shield, Workflow, X, Zap,
+  Layers3, Network, Radio, Server, Shield, Type, Workflow, X, Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Handle, NodeResizer } from '@xyflow/react';
@@ -26,11 +26,32 @@ export const CATALOG: { type: ComponentType; label: string; detail: string; icon
   { type: 'storage', label: 'Object storage', detail: 'Files, images and other objects', icon: HardDrive, color: 'purple', category: 'Data & messaging' },
   { type: 'external', label: 'External service', detail: 'A third-party dependency', icon: Globe, color: 'gray', category: 'Other' },
   { type: 'generic', label: 'Custom component', detail: 'Make it your own', icon: Box, color: 'gray', category: 'Other' },
+  { type: 'text', label: 'Text', detail: 'Notes and headings on the canvas', icon: Type, color: 'gray', category: 'Annotations' },
 ];
 
 export const metadata = (type: ComponentType) => CATALOG.find(item => item.type === type)!;
-export type StudioNode = Node<{ component: DiagramNode }, 'component'>;
+export type StudioNode = Node<{ component: DiagramNode }, 'component' | 'text'>;
 export const InteractionContext = createContext({ begin: () => {}, end: () => {} });
+export const TextEditContext = createContext({ enabled: true, begin: () => {}, end: () => {}, update: (_id: string, _text: string) => {} });
+
+export function TextNode({ data, selected }: NodeProps<StudioNode>) {
+  const node = data.component;
+  const interaction = useContext(InteractionContext);
+  const edit = useContext(TextEditContext);
+  const [editing, setEditing] = useState(false);
+  const input = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
+  useEffect(() => { if (!selected || !edit.enabled) setEditing(false); }, [selected, edit.enabled]);
+  return <div className={`text-node ${selected ? 'is-selected' : ''}`} title="Double-click to edit text"
+    onDoubleClick={() => { if (edit.enabled) setEditing(true); }}>
+    <NodeResizer isVisible={selected && edit.enabled} minWidth={160} minHeight={88} maxWidth={1000} maxHeight={1000}
+      color="#247657" onResizeStart={interaction.begin} onResizeEnd={interaction.end} />
+    {editing ? <textarea ref={input} className="nodrag nopan nowheel" aria-label="Canvas text" maxLength={5000}
+      value={node.properties.description} onFocus={edit.begin} onBlur={() => { edit.end(); setEditing(false); }}
+      onChange={event => edit.update(node.id, event.target.value)} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape') event.currentTarget.blur(); }} />
+      : <div className={`canvas-text ${node.properties.description ? '' : 'is-placeholder'}`}>{node.properties.description || 'Double-click to write text'}</div>}
+  </div>;
+}
 
 export function ComponentNode({ data, selected }: NodeProps<StudioNode>) {
   const component = data.component; const info = metadata(component.type); const Icon = info.icon;

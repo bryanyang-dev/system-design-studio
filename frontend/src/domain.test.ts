@@ -32,4 +32,16 @@ describe('diagram operations', () => {
     expect(() => parseImport({ ...input, graph: { ...input.graph, schema_version: 2 } })).toThrow('schema');
     expect(() => parseImport({ ...input, graph: { ...input.graph, nodes: [...input.graph.nodes, input.graph.nodes[0]] } })).toThrow('unique');
   });
+  it('preserves multiline annotations through import and duplication and rejects connections to text', () => {
+    const graph = sampleGraph();
+    const note = { ...graph.nodes[0], id: 'note', type: 'text' as const, label: 'Text', properties: { ...graph.nodes[0].properties, description: 'Traffic: 100M requests\nCache popular reads' } };
+    graph.nodes.push(note);
+    const imported = parseImport({ title: 'Annotated', graph });
+    expect(imported.graph.nodes.at(-1)).toEqual(note);
+    const copy = duplicateElements(imported.graph, new Set(['note']), () => 'note-copy');
+    expect(copy.graph.nodes.at(-1)).toMatchObject({ type: 'text', properties: note.properties });
+    expect(copy.graph.edges).toHaveLength(graph.edges.length);
+    expect(removeElements(copy.graph, new Set(['note'])).nodes.some(node => node.id === 'note-copy')).toBe(true);
+    expect(() => parseImport({ title: 'Invalid', graph: { ...graph, edges: [...graph.edges, { ...graph.edges[0], id: 'bad', target: 'note' }] } })).toThrow('Text annotations');
+  });
 });

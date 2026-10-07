@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeftRight, ArrowRight, BookOpen, Check, ChevronDown, Copy, Download, FolderOpen,
   History, Link2, LoaderCircle, Maximize2, Minus, MousePointer2, PanelLeft, Plus,
-  Redo2, Search, Settings2, Trash2, Undo2, Upload, Workflow, X,
+  Redo2, Search, Settings2, Trash2, Type, Undo2, Upload, Workflow, X,
 } from 'lucide-react';
 import {
   Background, BackgroundVariant, ConnectionMode, MarkerType, MiniMap, ReactFlow, ReactFlowProvider,
@@ -15,14 +15,14 @@ import {
   parseImport, removeElements, sampleGraph,
 } from './domain';
 import type { ComponentType, ConnectionPort, DiagramContent, DiagramEdge, DiagramNode, DiagramSummary, Version } from './domain';
-import { Brand, CATALOG, ComponentNode, IconButton, InteractionContext, metadata, Modal } from './components';
+import { Brand, CATALOG, ComponentNode, IconButton, InteractionContext, metadata, Modal, TextNode, TextEditContext } from './components';
 import type { StudioNode } from './components';
 import { useEditor } from './useEditor';
 import { ConnectionEdge } from './ConnectionEdge';
 import type { ConnectionFlowEdge } from './ConnectionEdge';
 import { connectionLanes, nodeHandles } from './connections';
 
-const nodeTypes = { component: ComponentNode };
+const nodeTypes = { component: ComponentNode, text: TextNode };
 const edgeTypes = { connection: ConnectionEdge };
 const dateLabel = (date: string) => new Date(date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const messageOf = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.';
@@ -217,10 +217,11 @@ function Studio() {
   }
 
   const nodes: StudioNode[] = doc?.graph.nodes.map(component => ({
-    id: component.id, type: 'component', position: component.position, data: { component },
+    id: component.id, type: component.type === 'text' ? 'text' : 'component', position: component.position, data: { component },
     selected: selection.has(component.id), width: component.width, height: component.height,
     measured: { width: component.width, height: component.height },
-    handles: nodeHandles(component),
+    handles: component.type === 'text' ? [] : nodeHandles(component),
+    connectable: component.type !== 'text',
     style: { width: component.width, height: component.height },
   })) ?? [];
   const lanes = connectionLanes(doc?.graph.edges ?? []);
@@ -324,8 +325,7 @@ function Studio() {
   const disabled = busy || !doc || !!editor.draft || editor.status === 'conflict';
   const statusLabels = { saved: 'All changes saved', pending: 'Unsaved changes', saving: 'Saving…', error: 'Save failed', conflict: 'Save conflict' };
 
-  return <InteractionContext.Provider value={{ begin: () => { editor.checkpoint(); editor.setInteracting(true); }, end: () => editor.setInteracting(false) }}>
-    <div className="studio">
+  return <div className="studio">
       <header className="app-header">
         <Brand />
         <IconButton label="Toggle component library" className="mobile-panel-toggle" onClick={() => { setShowPalette(value => !value); setShowInspector(false); }}><PanelLeft size={17} /></IconButton>
@@ -350,7 +350,7 @@ function Studio() {
           <div className="palette-heading"><div className="eyebrow">BUILD YOUR SYSTEM</div><h2>Components</h2><p>Click to add, or drag onto the canvas.</p></div>
           <label className="search-field"><Search size={15} /><input placeholder="Find a component…" aria-label="Search components" value={paletteSearch} onChange={event => setPaletteSearch(event.target.value)} /></label>
           <div className="palette-list">
-            {['Traffic & compute', 'Data & messaging', 'Other'].map(category => {
+            {['Traffic & compute', 'Data & messaging', 'Other', 'Annotations'].map(category => {
               const items = palette.filter(item => item.category === category);
               return items.length > 0 && <section key={category}><h3>{category}</h3>{items.map(item => {
                 const Icon = item.icon;
@@ -366,6 +366,7 @@ function Studio() {
 
         <main className="canvas-area" ref={canvasRef} aria-label="Diagram editor">
           <div className="canvas-toolbar"><span className="canvas-mode"><MousePointer2 size={14} />Design canvas</span><span className="toolbar-divider" />
+            <IconButton label="Add text" onClick={() => addNode('text')} disabled={disabled}><Type size={16} /></IconButton>
             <IconButton label="Undo (⌘/Ctrl Z)" onClick={editor.undo} disabled={disabled || !editor.canUndo}><Undo2 size={16} /></IconButton>
             <IconButton label="Redo (⌘/Ctrl Shift Z)" onClick={editor.redo} disabled={disabled || !editor.canRedo}><Redo2 size={16} /></IconButton>
             <span className="toolbar-divider" />
@@ -381,6 +382,9 @@ function Studio() {
               : editor.status === 'error' ? <button onClick={() => void editor.save()}>Retry save</button> : <IconButton label="Dismiss message" onClick={() => setAppError('')}><X size={16} /></IconButton>}
           </div>}
 
+          <InteractionContext.Provider value={{ begin: () => { editor.checkpoint(); editor.setInteracting(true); }, end: () => editor.setInteracting(false) }}>
+          <TextEditContext.Provider value={{ enabled: !disabled, begin: fieldEditing.onFocus, end: fieldEditing.onBlur,
+            update: (id, text) => change(content => ({ ...content, graph: { ...content.graph, nodes: content.graph.nodes.map(node => node.id === id ? { ...node, properties: { ...node.properties, description: text } } : node) } }), false) }}>
           <ReactFlow<StudioNode, ConnectionFlowEdge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} connectionMode={ConnectionMode.Loose} onNodesChange={nodesChanged} onEdgesChange={edgesChanged} onConnect={connect}
             onNodeDragStart={() => { editor.checkpoint(); editor.setInteracting(true); }} onNodeDragStop={() => editor.setInteracting(false)}
             onNodeClick={() => setTab('properties')}
@@ -395,6 +399,8 @@ function Studio() {
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d0d8d0" />
             {(doc?.graph.nodes.length ?? 0) > 0 && <MiniMap pannable zoomable nodeColor="#dbe9df" nodeStrokeColor="#a4beaf" maskColor="rgba(247,248,245,.7)" />}
           </ReactFlow>
+          </TextEditContext.Provider>
+          </InteractionContext.Provider>
 
           {loading ? <div className="canvas-empty"><LoaderCircle className="spin" size={25} /><p>Opening your workspace…</p></div>
             : !doc ? <div className="canvas-empty"><div className="empty-illustration"><Workflow size={38} strokeWidth={1.3} /><span className="illustration-dot" /></div><div className="eyebrow">A PLACE TO THINK IN SYSTEMS</div><h1>Make your architecture visible.</h1><p>Connect the pieces. Capture the decisions.<br />Build a clearer picture of your system.</p><button className="button button-primary" disabled={busy} onClick={() => void create()}><Plus size={16} />Create your first diagram</button><button className="text-button" disabled={busy} onClick={() => void create({ title: 'Web application architecture', graph: sampleGraph(), context: { ...emptyContext(), brief: 'A web application with an API, read cache, and primary database.' } })}>Or explore a simple example <ArrowRight size={14} /></button></div>
@@ -413,10 +419,14 @@ function Studio() {
                 <label>Requirements<textarea {...fieldEditing} rows={5} maxLength={10000} placeholder="Key features, traffic estimates, latency and availability targets…" value={doc?.context.requirements ?? ''} onChange={event => change(content => ({ ...content, context: { ...content.context, requirements: event.target.value } }), false)} /></label>
                 <label>Constraints & decisions<textarea {...fieldEditing} rows={5} maxLength={10000} placeholder="Budget, technology choices, assumptions, and tradeoffs…" value={doc?.context.constraints ?? ''} onChange={event => change(content => ({ ...content, context: { ...content.context, constraints: event.target.value } }), false)} /></label>
               </fieldset><div className="context-note"><BookOpen size={15} /><span>Context is saved with this diagram and included in its JSON export.</span></div></>
+              : selectedNode?.type === 'text' ? <><div className="inspector-component-icon tint-gray"><Type size={24} /></div><div className="eyebrow">ANNOTATION</div><h2>Text</h2><p className="panel-description">Keep notes and headings beside your design.</p>
+                <fieldset disabled={disabled} className="property-fields"><label>Text content<textarea {...fieldEditing} rows={8} maxLength={5000} placeholder="Write a note…" value={selectedNode.properties.description} onChange={event => editProperty('description', event.target.value)} /></label></fieldset>
+                <div className="inspector-actions"><button className="button button-outline" disabled={disabled} onClick={duplicateSelection}><Copy size={14} />Duplicate</button><IconButton label="Delete text" className="danger" disabled={disabled} onClick={deleteSelection}><Trash2 size={16} /></IconButton></div>
+                <p className="field-hint">Double-click the text to edit on the canvas. Drag to move it, or use the corner handles to resize. Text saves automatically.</p></>
               : selectedNode ? <><div className={`inspector-component-icon tint-${metadata(selectedNode.type).color}`}>{(() => { const Icon = metadata(selectedNode.type).icon; return <Icon size={24} strokeWidth={1.5} />; })()}</div><div className="eyebrow">COMPONENT</div><h2>{metadata(selectedNode.type).label}</h2><p className="panel-description">Describe its role in your system.</p>
                 <fieldset disabled={disabled} className="property-fields">
                   <label>Label<input {...fieldEditing} maxLength={200} value={selectedNode.label} onChange={event => editNode({ label: event.target.value || 'Untitled component' })} /></label>
-                  <label>Type<select value={selectedNode.type} onChange={event => editNode({ type: event.target.value as ComponentType })}>{CATALOG.map(item => <option value={item.type} key={item.type}>{item.label}</option>)}</select></label>
+                  <label>Type<select value={selectedNode.type} onChange={event => editNode({ type: event.target.value as ComponentType })}>{CATALOG.filter(item => item.type !== 'text').map(item => <option value={item.type} key={item.type}>{item.label}</option>)}</select></label>
                   <label>Technology<input {...fieldEditing} maxLength={200} value={selectedNode.properties.technology} placeholder="e.g. PostgreSQL, Redis, Python" onChange={event => editProperty('technology', event.target.value)} /></label>
                   <label>Description<textarea {...fieldEditing} maxLength={5000} rows={4} value={selectedNode.properties.description} placeholder="What is this component responsible for?" onChange={event => editProperty('description', event.target.value)} /></label>
                   <div className="field-row"><label>Replicas<input {...fieldEditing} type="number" min={1} max={1000000} step={1} value={selectedNode.properties.replicas ?? ''} placeholder="Unknown" onChange={event => { const value = event.target.value; if (!value) editProperty('replicas', null); else if (Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 1000000) editProperty('replicas', Number(value)); }} /></label><label>Region<input {...fieldEditing} maxLength={200} value={selectedNode.properties.region} placeholder="Optional" onChange={event => editProperty('region', event.target.value)} /></label></div>
@@ -458,6 +468,5 @@ function Studio() {
 
       {showHelp && <Modal title="Make yourself at home" subtitle="A few ways to move around your design canvas." onClose={() => setShowHelp(false)}><div className="help-list"><div><strong>Add a component</strong><span>Click a library item, or drag it onto the canvas.</span></div><div><strong>Connect components</strong><span>Drag between dots on any side, or click a dot and then another. Each dot can be reused for multiple connections.</span></div><div><strong>Draw two-way arrows</strong><span>Select a connection, then choose Direction → Two way in Properties.</span></div><div><strong>Move around</strong><span>Drag the background to pan. Scroll to zoom.</span></div><div><strong>Select multiple</strong><span>Shift + drag a box, or Shift + click components.</span></div><div><strong>Undo / redo</strong><span>⌘/Ctrl Z · ⌘/Ctrl Shift Z</span></div><div><strong>Duplicate / delete</strong><span>⌘/Ctrl D · Delete or Backspace</span></div><div><strong>Fit everything on screen</strong><span>Press F, or use the fit button.</span></div><div><strong>Save</strong><span>Changes autosave. ⌘/Ctrl S saves immediately.</span></div></div><div className="modal-footer"><button className="button button-primary" onClick={() => setShowHelp(false)}>Got it <Check size={14} /></button></div></Modal>}
       {busy && !isModalOpen && <div className="busy-indicator" role="status"><LoaderCircle className="spin" size={16} />Working…</div>}
-    </div>
-  </InteractionContext.Provider>;
+    </div>;
 }

@@ -114,6 +114,12 @@ h1, h2, h3, p { margin: 0; }
 .component-node { width: 100%; height: 100%; background: #fff; border: 1px solid #d7e0d6; border-radius: 10px; padding: 14px 15px; box-shadow: 0 3px 10px #29442d06; overflow: visible; }
 .component-node:hover { border-color: #a8c0a8; }
 .component-node.is-selected { border-color: #508364; box-shadow: 0 0 0 2px #4a7e6014, 0 4px 12px #29442d0a; }
+.text-node { width: 100%; height: 100%; padding: 10px; border: 1px solid transparent; border-radius: 4px; }
+.text-node:hover { border-color: #d7e0d6; }
+.text-node.is-selected { border-color: #508364; background: #ffffff60; }
+.canvas-text, .text-node textarea { width: 100%; height: 100%; margin: 0; font-family: Menlo, Monaco, Consolas, monospace; font-size: 16px; line-height: 1.5; color: #374d3c; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; }
+.canvas-text.is-placeholder { color: #95a18d; }
+.text-node textarea { display: block; border: 0; border-radius: 0; padding: 0; background: transparent; resize: none; outline: none; }
 .node-top { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
 .node-icon { width: 27px; height: 27px; border-radius: 6px; display: grid; place-items: center; flex-shrink: 0; }
 .node-kind { color: #95a18d; font-size: 9px; text-transform: uppercase; letter-spacing: .75px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

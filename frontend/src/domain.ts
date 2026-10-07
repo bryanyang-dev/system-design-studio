@@ -1,6 +1,6 @@
 export const COMPONENT_TYPES = [
   'client', 'cdn', 'load_balancer', 'gateway', 'service', 'worker',
-  'database', 'document_database', 'cache', 'queue', 'stream', 'storage', 'external', 'generic',
+  'database', 'document_database', 'cache', 'queue', 'stream', 'storage', 'external', 'generic', 'text',
 ] as const;
 export type ComponentType = typeof COMPONENT_TYPES[number];
 export const CONNECTION_PORTS = ['top', 'right', 'bottom', 'left'] as const;
@@ -119,9 +119,11 @@ export function parseImport(value: unknown): DiagramContent {
     };
   });
   const nodeIds = new Set(nodes.map(node => node.id));
+  const textIds = new Set(nodes.filter(node => node.type === 'text').map(node => node.id));
   const edges: DiagramEdge[] = graph.edges.map(value => {
     const edge = record(value); const source = text(edge.source, 100); const target = text(edge.target, 100);
     if (!nodeIds.has(source) || !nodeIds.has(target)) throw new Error('A connection references a missing component.');
+    if (textIds.has(source) || textIds.has(target)) throw new Error('Text annotations cannot have connections.');
     const interaction = edge.interaction ?? 'synchronous';
     if (interaction !== 'synchronous' && interaction !== 'asynchronous') throw new Error('Unknown interaction type.');
     const direction = edge.direction ?? 'one_way';

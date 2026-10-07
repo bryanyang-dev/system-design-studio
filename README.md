@@ -7,6 +7,7 @@ A local web app for creating and editing software system diagrams. This first im
 - Create, rename, open, duplicate, and delete diagrams.
 - Add 14 kinds of components by clicking or dragging from the palette.
 - Move, resize, multi-select, duplicate, and delete components.
+- Add multiline text with the canvas toolbar or Text palette item. Double-click to edit on the canvas, or use Text content in Properties; drag, resize, duplicate, and undo notes like other elements.
 - Draw one-way or two-way connections from reusable dots on all four sides of each component. Nodes and individual dots accept multiple connections; parallel connections use separate paths.
 - Edit connection labels, protocols, source/target sides, direction, and synchronous/asynchronous interaction.
 - Edit component descriptions, technology, replica counts, and regions.
@@ -17,6 +18,8 @@ A local web app for creating and editing software system diagrams. This first im
 - Import portable JSON into a new diagram after a summary preview; export JSON.
 
 AI, interview practice, sign-in, sharing, groups, auto-layout, and PNG export are deferred. This is a single-user local development slice; bind both servers to loopback rather than exposing them publicly.
+
+Text annotations are stored as nodes with `type: "text"`; their content is in `properties.description`. They have no connection dots. Notes are included in autosave, revisions, JSON import/export, and the 500-node limit. Existing diagrams need no database migration.
 
 ## Stack and layout
 

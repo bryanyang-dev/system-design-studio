@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 NodeType = Literal[
     "client", "cdn", "load_balancer", "gateway", "service", "worker",
     "database", "document_database", "cache", "queue", "stream",
-    "storage", "external", "generic",
+    "storage", "external", "generic", "text",
 ]
 
 
@@ -73,9 +73,12 @@ class Graph(StrictModel):
             raise ValueError("Connection IDs must be unique")
         if set(node_ids) & set(edge_ids):
             raise ValueError("Nodes and connections must have distinct IDs")
+        text_ids = {node.id for node in self.nodes if node.type == "text"}
         for edge in self.edges:
             if edge.source not in node_ids or edge.target not in node_ids:
                 raise ValueError("Every connection must reference existing nodes")
+            if edge.source in text_ids or edge.target in text_ids:
+                raise ValueError("Text annotations cannot have connections")
         return self
 
 

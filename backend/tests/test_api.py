@@ -15,6 +15,25 @@ def node(node_id="api"):
     return {"id": node_id, "type": "service", "label": "API", "position": {"x": 0, "y": 0}}
 
 
+def test_text_annotation_save_and_restore(client):
+    note = {**node("note"), "type": "text", "label": "Text", "properties": {"description": "100M requests\nCache popular reads"}}
+    created = client.post("/api/diagrams", json={"graph": {"nodes": [node(), note]}})
+    assert created.status_code == 201
+    original = created.json()
+    path = f"/api/diagrams/{original['id']}"
+    graph = original["graph"]
+    graph["nodes"][1]["properties"]["description"] = "Updated note\nSecond line"
+    graph["nodes"][1]["width"] = 320
+    graph["nodes"][1]["position"] = {"x": -32, "y": 128}
+    saved = client.patch(path, json={"title": original["title"], "graph": graph, "expected_version": 1})
+    assert saved.status_code == 200
+    assert client.get(path).json()["graph"] == saved.json()["graph"]
+    invalid_graph = {**graph, "edges": [{"id": "bad", "source": "api", "target": "note"}]}
+    assert client.patch(path, json={"graph": invalid_graph, "expected_version": 2}).status_code == 422
+    restored = client.post(f"{path}/restore", json={"expected_version": 2, "version": 1}).json()
+    assert restored["graph"]["nodes"][1]["properties"]["description"] == note["properties"]["description"]
+
+
 def test_persistence_conflict_and_restore(tmp_path):
     url = f"sqlite:///{tmp_path / 'persistent.db'}"
     with TestClient(create_app(url)) as client:
