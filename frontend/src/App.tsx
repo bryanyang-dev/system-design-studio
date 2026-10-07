@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeftRight, ArrowRight, BookOpen, Check, ChevronDown, Copy, Download, FolderOpen,
   History, Link2, LoaderCircle, Maximize2, Minus, MousePointer2, PanelLeft, Plus,
-  Redo2, Search, Settings2, Trash2, Type, Undo2, Upload, Workflow, X,
+  Redo2, Search, Settings2, Sparkles, Trash2, Type, Undo2, Upload, Workflow, X,
 } from 'lucide-react';
 import {
   Background, BackgroundVariant, ConnectionMode, MarkerType, MiniMap, ReactFlow, ReactFlowProvider,
@@ -12,7 +12,7 @@ import type { Connection, EdgeChange, NodeChange } from '@xyflow/react';
 import { api } from './api';
 import {
   COMPONENT_TYPES, CONNECTION_PORTS, contentOf, duplicateElements, emptyContext, emptyProperties,
-  parseImport, removeElements, sampleGraph,
+  fingerprint, parseImport, removeElements, sampleGraph,
 } from './domain';
 import type { ComponentType, ConnectionPort, DiagramContent, DiagramEdge, DiagramNode, DiagramSummary, Version } from './domain';
 import { Brand, CATALOG, ComponentNode, IconButton, InteractionContext, metadata, Modal, TextNode, TextEditContext } from './components';
@@ -21,6 +21,7 @@ import { useEditor } from './useEditor';
 import { ConnectionEdge } from './ConnectionEdge';
 import type { ConnectionFlowEdge } from './ConnectionEdge';
 import { connectionLanes, nodeHandles } from './connections';
+import { ChatGPTDialog } from './ChatGPTDialog';
 
 const nodeTypes = { component: ComponentNode, text: TextNode };
 const edgeTypes = { connection: ConnectionEdge };
@@ -47,6 +48,7 @@ function Studio() {
   const [imported, setImported] = useState<DiagramContent | null>(null);
   const [pendingDelete, setPendingDelete] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showChatGPT, setShowChatGPT] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [showPalette, setShowPalette] = useState(false);
@@ -166,7 +168,7 @@ function Studio() {
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
-      if (target.closest('input, textarea, select, [contenteditable="true"]') || library || versions || imported || pendingDelete || showHelp || editor.draft || titleEditing) return;
+      if (target.closest('input, textarea, select, [contenteditable="true"]') || library || versions || imported || pendingDelete || showHelp || showChatGPT || editor.draft || titleEditing) return;
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) editor.redo(); else editor.undo(); }
       if (modifier && event.key.toLowerCase() === 'y') { event.preventDefault(); editor.redo(); }
@@ -321,7 +323,7 @@ function Studio() {
   }
 
   const palette = CATALOG.filter(item => `${item.label} ${item.detail}`.toLowerCase().includes(paletteSearch.toLowerCase()));
-  const isModalOpen = library || !!versions || !!imported || pendingDelete || showHelp || !!editor.draft;
+  const isModalOpen = library || !!versions || !!imported || pendingDelete || showHelp || showChatGPT || !!editor.draft;
   const disabled = busy || !doc || !!editor.draft || editor.status === 'conflict';
   const statusLabels = { saved: 'All changes saved', pending: 'Unsaved changes', saving: 'Saving…', error: 'Save failed', conflict: 'Save conflict' };
 
@@ -336,6 +338,7 @@ function Studio() {
             : <button className="document-title" disabled={disabled} title="Rename diagram" onClick={() => { setTitleDraft(doc?.title ?? ''); setTitleEditing(true); }}>{doc?.title ?? 'Your next system starts here'}{doc && <span className="title-edit-hint">Rename</span>}</button>}
         </div>
         <div className="header-actions">
+          <button className="button button-outline" onClick={() => setShowChatGPT(true)} disabled={busy}><Sparkles size={15} />ChatGPT</button>
           {doc && <span className={`save-status status-${editor.status}`} role="status">{editor.status === 'saved' ? <Check size={14} /> : editor.status === 'saving' ? <LoaderCircle className="spin" size={14} /> : <span className="status-dot" />}{statusLabels[editor.status]}</span>}
           <button className="button button-quiet" onClick={() => inputFile.current?.click()} disabled={busy}><Upload size={15} />Import</button>
           <button className="button button-outline" onClick={exportJson} disabled={!doc}><Download size={15} />Export JSON</button>
@@ -467,6 +470,11 @@ function Studio() {
       {editor.draft && <Modal title="Recover your local draft?" subtitle="We found changes that were not saved to the server." onClose={() => { /* The user must explicitly choose to recover or discard. */ }}><p className="draft-summary">{editor.draft.content.title} · {editor.draft.content.graph.nodes.length} components</p>{editor.draft.baseVersion !== doc?.version && <p className="field-hint">The server has a newer version. Recover this draft and save it as a copy to keep both designs.</p>}<div className="modal-footer"><button className="button button-outline" onClick={() => editor.resolveDraft(false)}>Discard local draft</button><button className="button button-primary" onClick={() => editor.resolveDraft(true)}>Recover draft</button></div></Modal>}
 
       {showHelp && <Modal title="Make yourself at home" subtitle="A few ways to move around your design canvas." onClose={() => setShowHelp(false)}><div className="help-list"><div><strong>Add a component</strong><span>Click a library item, or drag it onto the canvas.</span></div><div><strong>Connect components</strong><span>Drag between dots on any side, or click a dot and then another. Each dot can be reused for multiple connections.</span></div><div><strong>Draw two-way arrows</strong><span>Select a connection, then choose Direction → Two way in Properties.</span></div><div><strong>Move around</strong><span>Drag the background to pan. Scroll to zoom.</span></div><div><strong>Select multiple</strong><span>Shift + drag a box, or Shift + click components.</span></div><div><strong>Undo / redo</strong><span>⌘/Ctrl Z · ⌘/Ctrl Shift Z</span></div><div><strong>Duplicate / delete</strong><span>⌘/Ctrl D · Delete or Backspace</span></div><div><strong>Fit everything on screen</strong><span>Press F, or use the fit button.</span></div><div><strong>Save</strong><span>Changes autosave. ⌘/Ctrl S saves immediately.</span></div></div><div className="modal-footer"><button className="button button-primary" onClick={() => setShowHelp(false)}>Got it <Check size={14} /></button></div></Modal>}
+      {showChatGPT && <ChatGPTDialog diagram={doc} editable={!disabled} onClose={() => setShowChatGPT(false)} onApply={(graph, base, diagramId) => {
+        const current = editor.getCurrent();
+        if (!current || current.id !== diagramId || fingerprint(current) !== base || disabled) throw new Error('The diagram changed. Ask again before applying this proposal.');
+        change(content => ({ ...content, graph })); select([]);
+      }} />}
       {busy && !isModalOpen && <div className="busy-indicator" role="status"><LoaderCircle className="spin" size={16} />Working…</div>}
     </div>;
 }

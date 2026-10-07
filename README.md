@@ -1,6 +1,6 @@
 # System Design Studio
 
-A local web app for creating and editing software system diagrams. This first implementation has no AI integration, model calls, background workers, or authentication.
+A local web app for creating and editing software system diagrams, with an optional assistant connected through Sign in with ChatGPT. No background workers or diagram-user authentication are included.
 
 ## Current slice
 
@@ -16,8 +16,30 @@ A local web app for creating and editing software system diagrams. This first im
 - Undo/redo, autosave, recover unsaved browser drafts, and handle version conflicts.
 - Save immutable revisions and restore an earlier revision as a new version.
 - Import portable JSON into a new diagram after a summary preview; export JSON.
+- Connect a ChatGPT account, choose an available model, ask design questions, and review proposed diagram changes before applying them.
 
-AI, interview practice, sign-in, sharing, groups, auto-layout, and PNG export are deferred. This is a single-user local development slice; bind both servers to loopback rather than exposing them publicly.
+Interview practice, diagram-user sign-in, sharing, groups, auto-layout, and PNG export are deferred. This is a single-user local development slice; bind both servers to loopback rather than exposing them publicly.
+
+## ChatGPT plan integration
+
+1. Run the frontend on port 5173 and backend on port 8000 using the existing startup instructions.
+2. Click **ChatGPT** in the header, then **Continue with ChatGPT**. Complete sign-in and authorize ChatGPT plan usage in the OpenAI browser window.
+3. Return to the app. The dialog shows the active account and its available models. Select a model and send a prompt.
+4. Reviews return an explanation. Diagram edits include a validated replacement graph and a before/after change list. Click **Apply proposed changes** to apply as one undoable edit. Changes to the source diagram invalidate an outstanding proposal.
+
+This uses OpenAI's [ChatGPT plan usage flow for local/open-source apps](https://developers.openai.com/siwc/token-sharing-open-source), subject to account eligibility and allowance. There is no API-key fallback. Configure app usage/credit limits in ChatGPT Settings; this app cannot guarantee provider-side charges beyond the limits you authorize. Successful sign-in or a model listing alone does not establish inference access; only a completed request does.
+
+The backend uses PKCE, state plus an HTTP-only callback cookie, nonce, and RS256 ID-token verification against OpenAI's JWKS. The callback URI is fixed to `http://127.0.0.1:8000/api/chatgpt/callback`; initial registration must use this URI. OAuth callback query parameters are redacted before access logging. The frontend receives connection status and model names, never OAuth tokens.
+
+Credentials, account/client mappings, and the stable host ID are stored under `.local/chatgpt/connection.json`, outside diagram exports and PostgreSQL. The directory is mode 0700 and atomic credential files are mode 0600 on Unix; they are protected by filesystem permissions, not encrypted at rest. `.local/` is ignored by Git. Run one backend process against this store so refresh-token rotation remains serialized. Do not copy the credential store to another computer as a shortcut for sign-in.
+
+Choose a saved account in the dialog and continue to reauthorize it, or choose **Add an account or workspace** for a new registration. Disconnect clears local tokens and attempts remote refresh-token revocation while preserving account registration and host identity. If revocation cannot be confirmed, disconnect the app in ChatGPT Settings. Restarting the backend preserves completed connections but cancels pending sign-ins; start again if a callback expires.
+
+Requests send the current diagram and design context only when you click **Ask ChatGPT**. The provider response is consumed as an SSE stream with `store: false` and `stream: true`, then returned after a completed event. Invalid graphs, failed/incomplete streams, and allowance errors cannot modify the diagram. HTTP requests have bounded inactivity timeouts; the current UI displays progress rather than token-by-token output. This is a single-turn assistant; interview sessions and conversation history remain deferred.
+
+Backend logs include each inference request body (model, instructions, prompt, and diagram/context), the validated response, and elapsed time. Matching `call` IDs connect request, response, and failure lines. These appear in the Uvicorn terminal and any file capturing its output. Logs therefore contain diagram content; OAuth credentials, authorization headers, and raw exception/provider error bodies are excluded. Failures record only the exception type and HTTP status when available.
+
+Automated integration tests use disposable RSA keys, temporary credential stores, and mock OpenAI responses. They do not sign into a real account or consume ChatGPT allowance. Live OAuth consent and a completed inference request must be verified by the account owner.
 
 Text annotations are stored as nodes with `type: "text"`; their content is in `properties.description`. They have no connection dots. Notes are included in autosave, revisions, JSON import/export, and the 500-node limit. Existing diagrams need no database migration.
 

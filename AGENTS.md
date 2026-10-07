@@ -11,6 +11,7 @@ Applies to all work in this repository. Follow explicit user instructions and an
 - Keep credentials out of source, logs, examples, and exports. Configure secrets
   through environment variables and document names without real values.
 - Update relevant documentation when behavior, the graph contract, or setup changes.
+- Prefer explicit blocks over single-line control-flow statements. Use braces and line breaks for if, for, while, and similar constructs when they contain executable statements. Optimize for readability over terseness.
 
 ## React and TypeScript
 

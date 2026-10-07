@@ -1,6 +1,7 @@
-"""Local-only API. AI and authentication are intentionally outside this slice."""
+"""Local-only diagram API with an optional ChatGPT-plan assistant connection."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import Base, DiagramRecord, RevisionRecord, make_engine, now, session_factory
 from backend.schemas import DiagramInput, DiagramSave, Graph, RestoreInput
+from backend.chatgpt import ChatGPTConnection, chatgpt_router
 
 
 def summary(record):
@@ -34,7 +36,7 @@ def revision(record):
     )
 
 
-def create_app(database_url=None):
+def create_app(database_url=None, chatgpt_connection=None):
     engine = make_engine(database_url) if database_url else make_engine()
     sessions = session_factory(engine)
 
@@ -46,6 +48,8 @@ def create_app(database_url=None):
         engine.dispose()
 
     app = FastAPI(title="System Design Studio", version="0.1.0", lifespan=lifespan)
+    connection = chatgpt_connection or ChatGPTConnection(Path(__file__).resolve().parents[1] / ".local" / "chatgpt")
+    app.include_router(chatgpt_router(connection))
 
     @app.middleware("http")
     async def local_request_guard(request: Request, call_next):
@@ -54,6 +58,15 @@ def create_app(database_url=None):
         allowed = {"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8000", "http://127.0.0.1:8000"}
         if origin and origin not in allowed:
             return Response("Origin not allowed", status_code=403)
+        if request.url.path.startswith("/api/chatgpt/"):
+            if request.url.hostname not in {"127.0.0.1", "localhost"}:
+                return Response("Local host required", status_code=403)
+            if request.url.path == "/api/chatgpt/callback":
+                request.state.oauth_query = dict(request.query_params)
+                # Uvicorn logs the request scope at response time; redact OAuth codes.
+                request.scope["query_string"] = b""
+            elif request.method == "POST" and request.headers.get("content-type", "").split(";")[0] != "application/json":
+                return Response("JSON required", status_code=415)
         if request.method in {"POST", "PATCH", "PUT"}:
             body = bytearray()
             async for chunk in request.stream():
@@ -61,7 +74,10 @@ def create_app(database_url=None):
                 if len(body) > 2_000_000:
                     return Response("Document is too large", status_code=413)
             request._body = bytes(body)
-        return await call_next(request)
+        response = await call_next(request)
+        if request.url.path.startswith("/api/chatgpt/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     def db():
         with sessions() as session:
