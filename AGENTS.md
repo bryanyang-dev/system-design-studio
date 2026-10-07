@@ -62,7 +62,7 @@ Applies to all work in this repository. Follow explicit user instructions and an
 
 ## Verification
 
-- Run checks appropriate to the change using already installed tools:
+- Run checks appropriate to the change:
   - Frontend types and production build: `npm run build --prefix frontend`
   - Frontend behavior tests: `npm test --prefix frontend`
   - Backend tests: `.venv/bin/python -m pytest backend/tests -q`
@@ -72,6 +72,5 @@ Applies to all work in this repository. Follow explicit user instructions and an
 - For canvas changes, verify relevant editing, selection, movement, undo, and persistence
   behavior in the browser. Check narrow layouts when the change affects layout.
 - SQLite tests do not establish PostgreSQL-specific behavior. Use the existing opt-in
-  PostgreSQL smoke test when relevant and when the database is already available; do not
-  start services or pull images without the approval required above.
+  PostgreSQL smoke test when relevant and when the database is already available.
 - Report which checks passed, skipped, or could not run. Do not claim unperformed validation.
