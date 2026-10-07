@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: diagram
+      POSTGRES_PASSWORD: diagram_local
+      POSTGRES_DB: diagram_ai
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - diagram_ai_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U diagram -d diagram_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  diagram_ai_data:
+
