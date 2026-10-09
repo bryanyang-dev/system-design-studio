@@ -41,6 +41,16 @@ class RevisionRecord(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=now)
 
 
+class InterviewRecord(Base):
+    __tablename__ = "interview_sessions"
+
+    id = Column(String(36), primary_key=True)
+    diagram_id = Column(String(36), ForeignKey("diagrams.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, nullable=False, default=1)
+    data = Column(document_type, nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=now)
+
+
 def make_engine(url=DATABASE_URL):
     options = {"pool_pre_ping": True}
     if url.startswith("sqlite"):
@@ -50,4 +60,3 @@ def make_engine(url=DATABASE_URL):
 
 def session_factory(engine):
     return sessionmaker(bind=engine, expire_on_commit=False)
-

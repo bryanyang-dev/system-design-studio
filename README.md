@@ -18,7 +18,7 @@ A local web app for creating and editing software system diagrams, with an optio
 - Import portable JSON into a new diagram after a summary preview; export JSON.
 - Connect a ChatGPT account, choose an available model, ask design questions, and review proposed diagram changes before applying them.
 
-Interview practice, diagram-user sign-in, sharing, groups, auto-layout, and PNG export are deferred. This is a single-user local development slice; bind both servers to loopback rather than exposing them publicly.
+Diagram-user sign-in, sharing, groups, auto-layout, and PNG export are deferred. This is a single-user local development slice; bind both servers to loopback rather than exposing them publicly.
 
 ## ChatGPT plan integration
 
@@ -35,11 +35,21 @@ Credentials, account/client mappings, and the stable host ID are stored under `.
 
 Choose a saved account in the dialog and continue to reauthorize it, or choose **Add an account or workspace** for a new registration. Disconnect clears local tokens and attempts remote refresh-token revocation while preserving account registration and host identity. If revocation cannot be confirmed, disconnect the app in ChatGPT Settings. Restarting the backend preserves completed connections but cancels pending sign-ins; start again if a callback expires.
 
-Requests send the current diagram and design context only when you click **Ask ChatGPT**. The provider response is consumed as an SSE stream with `store: false` and `stream: true`, then returned after a completed event. Invalid graphs, failed/incomplete streams, and allowance errors cannot modify the diagram. HTTP requests have bounded inactivity timeouts; the current UI displays progress rather than token-by-token output. This is a single-turn assistant; interview sessions and conversation history remain deferred.
+Assistant requests send the current diagram and design context when you click **Ask ChatGPT**. The provider response is consumed as an SSE stream with `store: false` and `stream: true`, then returned after a completed event. Invalid graphs, failed/incomplete streams, and allowance errors cannot modify the diagram. HTTP requests have bounded inactivity timeouts; the current UI displays progress rather than token-by-token output. The diagram assistant remains single-turn; interview mode maintains its own transcript.
 
 Backend logs include each inference request body (model, instructions, prompt, and diagram/context), the validated response, and elapsed time. Matching `call` IDs connect request, response, and failure lines. These appear in the Uvicorn terminal and any file capturing its output. Logs therefore contain diagram content; OAuth credentials, authorization headers, and raw exception/provider error bodies are excluded. Failures record only the exception type and HTTP status when available.
 
 Automated integration tests use disposable RSA keys, temporary credential stores, and mock OpenAI responses. They do not sign into a real account or consume ChatGPT allowance. Live OAuth consent and a completed inference request must be verified by the account owner.
+
+## Interview practice
+
+Open a diagram (including an empty one), supply its design context, and click **Interview**. Connect ChatGPT first, then choose a model, difficulty, duration or untimed practice, and optional focus areas. The side panel leaves the canvas editable. The interviewer asks one main question at a time, probes your reasoning, and introduces hypothetical constraints with explicit units. Solutions are withheld by instruction unless you request **Hint** or **Coaching**; model adherence is not guaranteed.
+
+Answer in the panel and edit the diagram as needed. Each AI turn sends the current diagram/context, transcript, previous observed component summaries, and session settings to OpenAI. The interviewer cannot return or apply a graph. Hypothetical constraints stay in the interview and never overwrite the diagram context. Hint, coaching, and skipped-question turns are recorded.
+
+Sessions, transcript, per-turn design snapshots/observed diagram versions, settings, timestamps, and feedback persist in PostgreSQL's new `interview_sessions` table, created on backend startup without changing existing tables. Snapshots can include unsaved canvas edits; their observed version is the last saved version. Closing the panel does not pause the clock. Use **Pause**, **Resume**, or **+15 minutes**; expiration invites you to finish or extend. The timer uses server timestamps and persisted paused duration, so refreshes and backend restarts do not reset it.
+
+Reopening the panel loads the latest session for that diagram; use **Saved sessions** to revisit others. **Finish & get feedback** produces six rubric assessments, transcript evidence, strengths, gaps, and next practice actions. Unobserved criteria should be marked as such; numeric scores require citations to actual answer turns. Concurrent updates return a conflict requiring reload, and failed AI turns do not advance the session. Sessions are capped at 40 turns before wrap-up; timed sessions can be extended up to 180 minutes. Deleting a diagram deletes its interviews. Scenario templates, voice, transcript export, and progress tracking are deferred.
 
 Text annotations are stored as nodes with `type: "text"`; their content is in `properties.description`. They have no connection dots. Notes are included in autosave, revisions, JSON import/export, and the 500-node limit. Existing diagrams need no database migration.
 

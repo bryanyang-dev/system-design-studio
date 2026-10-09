@@ -22,6 +22,7 @@ import { ConnectionEdge } from './ConnectionEdge';
 import type { ConnectionFlowEdge } from './ConnectionEdge';
 import { connectionLanes, nodeHandles } from './connections';
 import { ChatGPTDialog } from './ChatGPTDialog';
+import { InterviewPanel } from './InterviewPanel';
 
 const nodeTypes = { component: ComponentNode, text: TextNode };
 const edgeTypes = { connection: ConnectionEdge };
@@ -49,6 +50,7 @@ function Studio() {
   const [pendingDelete, setPendingDelete] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showChatGPT, setShowChatGPT] = useState(false);
+  const [showInterview, setShowInterview] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [showPalette, setShowPalette] = useState(false);
@@ -339,6 +341,7 @@ function Studio() {
         </div>
         <div className="header-actions">
           <button className="button button-outline" onClick={() => setShowChatGPT(true)} disabled={busy}><Sparkles size={15} />ChatGPT</button>
+          <button className="button button-outline" onClick={() => setShowInterview(value => !value)} disabled={busy || !doc}><BookOpen size={15} />Interview</button>
           {doc && <span className={`save-status status-${editor.status}`} role="status">{editor.status === 'saved' ? <Check size={14} /> : editor.status === 'saving' ? <LoaderCircle className="spin" size={14} /> : <span className="status-dot" />}{statusLabels[editor.status]}</span>}
           <button className="button button-quiet" onClick={() => inputFile.current?.click()} disabled={busy}><Upload size={15} />Import</button>
           <button className="button button-outline" onClick={exportJson} disabled={!doc}><Download size={15} />Export JSON</button>
@@ -413,7 +416,7 @@ function Studio() {
           {notice && <div className="toast" role="status"><Check size={15} />{notice}</div>}
         </main>
 
-        <aside className={`inspector ${showInspector ? 'mobile-open' : ''}`} aria-label="Properties and design context">
+        {!showInterview && <aside className={`inspector ${showInspector ? 'mobile-open' : ''}`} aria-label="Properties and design context">
           <div className="inspector-tabs"><button className={tab === 'properties' ? 'active' : ''} onClick={() => setTab('properties')}><Settings2 size={14} />Properties</button><button className={tab === 'context' ? 'active' : ''} onClick={() => setTab('context')}><BookOpen size={14} />Context</button></div>
           <div className="inspector-content">
             {tab === 'context' ? <><div className="eyebrow">THE BIG PICTURE</div><h2>Design context</h2><p className="panel-description">Give this diagram a purpose. Keep requirements and decisions close to the design.</p>
@@ -448,7 +451,9 @@ function Studio() {
                     : <div className="inspector-empty"><MousePointer2 size={27} strokeWidth={1.5} /><h3>A closer look</h3><p>Select a component or connection to edit its properties.</p><span className="keyboard-tip"><kbd>Shift</kbd> + click to select multiple</span></div>}
           </div>
           <div className="inspector-footer"><span className="local-dot" />Personal workspace<span>{doc ? `${doc.graph.nodes.length} components` : 'Local edition'}</span></div>
-        </aside>
+        </aside>}
+        {showInterview && doc && <InterviewPanel key={doc.id} diagram={doc} editable={!disabled}
+          onClose={() => setShowInterview(false)} onConnect={() => { setShowInterview(false); setShowChatGPT(true); }} />}
       </div>
 
       <input type="file" ref={inputFile} hidden accept=".json,application/json" onChange={event => { const file = event.target.files?.[0]; if (file) void importFile(file); }} />

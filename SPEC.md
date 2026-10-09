@@ -5,7 +5,7 @@ Date: October 6, 2026
 Required stack: Python backend  
 Working product name: System Design Studio
 
-Implementation update: the first delivery slice is the local manual diagram editor and persistence. AI, interview practice, authentication, and background workers are deferred. See `README.md` for the implemented slice and setup instructions; the sections below describe the broader product roadmap.
+Implementation update: the local editor includes persistence, ChatGPT-plan diagram assistance, and text-based interview practice with persisted sessions, timing, hints/coaching, and feedback. Diagram-user authentication and background workers remain deferred. See `README.md` for the implemented slice and setup instructions; the sections below describe the broader product roadmap.
 
 ## 1. Product summary
 

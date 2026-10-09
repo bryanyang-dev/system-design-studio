@@ -132,6 +132,25 @@ h1, h2, h3, p { margin: 0; }
 .chatgpt-result { border-top: 1px solid var(--border); padding-top: 16px; }
 .chatgpt-result ul { padding-left: 20px; max-height: 260px; overflow-y: auto; }
 .chatgpt-result li { margin-bottom: 10px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.interview-panel { width: 410px; flex-shrink: 0; background: #fff; border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.interview-heading { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px; border-bottom: 1px solid var(--border); }
+.interview-heading h2 { font-size: 18px; }
+.interview-heading p { font-size: 12px; color: #69766d; margin-top: 6px; }
+.interview-body { padding: 20px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
+.interview-history { display: grid; gap: 7px; font-size: 12px; }
+.interview-history select { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+.interview-status { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.interview-transcript { max-height: 380px; min-height: 130px; overflow: auto; }
+.interview-turn { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.interview-turn small { color: #69766d; text-transform: capitalize; font-size: 11px; }
+.interview-turn p, .interview-feedback p, .interview-body li { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; font-size: 13px; margin-top: 8px; }
+.interview-answer { background: #f0f5ec; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+.interview-answer strong { font-size: 12px; }
+.interview-feedback { display: grid; gap: 16px; }
+.interview-feedback strong { text-transform: capitalize; font-size: 13px; }
+.interview-timeout { background: #fff4df; padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+@media (max-width: 1100px) { .interview-panel { width: 350px; } }
+@media (max-width: 700px) { .interview-panel { position: absolute; right: 0; top: 0; bottom: 0; z-index: 7; width: min(350px, 92vw); box-shadow: -8px 0 30px #233d2620; } }
 .node-top { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
 .node-icon { width: 27px; height: 27px; border-radius: 6px; display: grid; place-items: center; flex-shrink: 0; }
 .node-kind { color: #95a18d; font-size: 9px; text-transform: uppercase; letter-spacing: .75px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
